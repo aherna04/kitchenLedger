@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./backend:/app
+      - ${KL_HOST_PATH:-/Users/alex/KitchenLedger}:/media
+    environment:
+      # Always the in-container paths (do not interpolate host KL_ROOT).
+      KL_ROOT: /media
+      KL_DATA_DIR: /media/.kitchenLedger
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5174:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_TARGET: http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped

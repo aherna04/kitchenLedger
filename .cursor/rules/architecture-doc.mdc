@@ -1,0 +1,29 @@
+---
+description: Keep docs/ARCHITECTURE.md in sync with structural changes
+alwaysApply: true
+---
+
+# Architecture document maintenance
+
+When you change project structure or behavior, update [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) in the **same task**.
+
+## Update the doc when you change
+
+- SQLite schema (`backend/app/db.py`)
+- API route groups or major endpoint behavior (`backend/app/main.py`)
+- Frontend routes or primary workflows (`frontend/src/App.tsx`, new pages)
+- Docker Compose volumes, ports, or env vars
+- Core module responsibilities under `backend/app/`
+- External dependencies (tesseract, media formats, etc.)
+
+## Do not update for
+
+- Bug fixes, styling, or copy that do not change architecture
+- Release version bumps (use CHANGELOG.md instead)
+- User-facing how-to steps (use README.md instead)
+
+## How to update
+
+- Edit the relevant existing section; avoid duplicating README or CHANGELOG content.
+- Keep mermaid diagrams valid (no spaces in node IDs, no HTML entities in labels).
+- If a section no longer applies, remove or rewrite it rather than appending obsolete notes.
