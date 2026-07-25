@@ -1,0 +1,27 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/app/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Cursor plans (local only)
+.cursor/plans/
+
+# Env
+.env
+.env.local
