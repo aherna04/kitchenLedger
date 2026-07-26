@@ -47,7 +47,7 @@ from app.recipes import (
 from app.scanner import scan_state, start_scan
 from app import tags as tags_mod
 
-app = FastAPI(title="Kitchen Ledger", version="2026.07.25")
+app = FastAPI(title="Kitchen Ledger", version="2026.07.25a")
 
 app.add_middleware(
     CORSMiddleware,

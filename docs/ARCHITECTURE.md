@@ -154,7 +154,10 @@ Supported images: JPEG, PNG, HEIC, WebP, TIFF.
 
 ## Versioning
 
-Date-based releases: `YYYY.MM.DD`. Notes in [CHANGELOG.md](../CHANGELOG.md); version strings in `frontend/package.json` and FastAPI `main.py`.
+Date-based releases use `YYYY.MM.DD`. Later deployments on the same day append
+sequential lowercase letters (`a`, `b`, and so on). Notes live in
+[CHANGELOG.md](../CHANGELOG.md); version strings live in `frontend/package.json`
+and FastAPI `main.py`.
 
 ## Keeping this document current
 

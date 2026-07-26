@@ -1,7 +1,7 @@
 {
   "name": "kitchen-ledger-frontend",
   "private": true,
-  "version": "2026.07.25",
+  "version": "2026.07.25a",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
