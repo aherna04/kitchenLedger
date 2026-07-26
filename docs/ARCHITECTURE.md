@@ -20,6 +20,7 @@ flowchart TB
   Backend --> Tesseract[Tesseract OCR]
   Backend --> Media["Kitchen volume"]
   Media --> Inbox[inbox/]
+  Media --> Hero[hero/]
   Media --> RecipesDir[recipes/]
   Media --> Catalog[.kitchenLedger/]
 ```
@@ -47,10 +48,10 @@ Interactive API: `http://localhost:8001/docs` (container listens on `:8000`; Com
 | `db.py` | SQLite schema, connection, config key-value store |
 | `models.py` | Pydantic request/response models |
 | `config.py` | Paths, extensions, env vars |
-| `scanner.py` | Background inbox scan + OCR pre-fill |
+| `scanner.py` | Background inbox scan, OCR pre-fill, optional hero stem matching |
 | `ocr.py` | Tesseract extract + naive ingredient/step split |
 | `metadata.py` | Image dims, SHA256, thumbnails, slugify |
-| `recipes.py` | Recipe list/get/update, ingredients/steps replace |
+| `recipes.py` | Recipe list/get/update, ingredients/steps, mark-reviewed move to recipes/, attach hero from draft |
 | `tags.py` | Tag CRUD, merge, assign, cooccurring |
 | `db_backup.py` | Online SQLite backup API |
 
@@ -66,7 +67,7 @@ Interactive API: `http://localhost:8001/docs` (container listens on `:8000`; Com
 
 SQLite schema in `backend/app/db.py`, applied on startup via `init_db()`.
 
-On `init_db()`, if stored `inbox_path` / `recipes_path` are missing on disk but the env-derived defaults exist, those defaults are written back into `config`. That keeps Docker usable after a local (host-path) run shared the same catalog volume.
+On `init_db()`, if stored `inbox_path` / `recipes_path` / `hero_path` are missing on disk but the env-derived defaults exist, those defaults are written back into `config`. That keeps Docker usable after a local (host-path) run shared the same catalog volume.
 
 ```mermaid
 erDiagram
@@ -78,12 +79,12 @@ erDiagram
 
 | Table | Purpose |
 |-------|---------|
-| `recipes` | Indexed scan (`status`: `draft` \| `reviewed`), title, notes, OCR text, image path |
+| `recipes` | Indexed scan (`status`: `draft` \| `reviewed`), title, notes, OCR text, image path; optional `hero_filename` / `hero_path` / `hero_mtime` for a dish photo |
 | `recipe_ingredients` | Ordered ingredient lines |
 | `recipe_steps` | Ordered direction lines |
 | `tags` | Labels (`name`, unique `slug`) |
 | `recipe_tags` | Recipe ↔ tag many-to-many |
-| `config` | Inbox/recipes path overrides |
+| `config` | Inbox / recipes / hero path overrides |
 
 Multi-tag AND filter on `GET /api/recipes` uses repeated `tag_id` query params.
 
@@ -91,8 +92,9 @@ Multi-tag AND filter on `GET /api/recipes` uses repeated `tag_id` query params.
 
 | Path | Role |
 |------|------|
-| `{KL_ROOT}/inbox/` | Drop scanned recipe images |
-| `{KL_ROOT}/recipes/` | Reserved for organized copies (future) |
+| `{KL_ROOT}/inbox/` | Drop zone / review queue on disk — scans and dish photos until processed |
+| `{KL_ROOT}/recipes/` | Kept recipe scans (moved here on **Mark reviewed**) |
+| `{KL_ROOT}/hero/` | Dish photos (moved here on **Link as hero to…**; stem auto-match also supported) |
 | `{KL_DATA_DIR}/` | Catalog (default `{KL_ROOT}/.kitchenLedger`): `index.db`, `thumbs/`, `backups/` |
 
 Env:
@@ -110,14 +112,16 @@ Supported images: JPEG, PNG, HEIC, WebP, TIFF.
 1. User drops images into inbox → clicks **Scan** (`POST /api/scan`).
 2. Background thread walks inbox, upserts `recipes`, generates thumbnails.
 3. New/changed files without `ocr_text` run Tesseract; lines are split into candidate ingredients/steps.
-4. Status via `GET /api/scan/status` (`phase`: `scanning` → `pruning` → `ocr` → `idle`).
-5. Missing files under the inbox path are pruned from the DB.
+4. Optional hero stem-match: walk `hero/`, match by filename stem, store hero columns.
+5. Status via `GET /api/scan/status` (`phase`: `scanning` → `pruning` → `ocr` → `hero` → `idle`).
+6. **Files stay in inbox/** until a review action moves them. Missing inbox files are pruned from the DB.
 
-### 2. Review draft
+### 2. Review and process
 
 1. Inbox lists `status=draft` recipes.
-2. Detail page shows the scan beside editable fields.
-3. User corrects OCR, adds tags, saves, and optionally **Mark reviewed**.
+2. **Recipe scan:** open detail, correct OCR, **Mark reviewed** → status `reviewed` and scan file moves `inbox/` → `recipes/` (path updated).
+3. **Dish photo:** Inbox **Link as hero to…** (or detail **Set hero from draft…**) → `POST /api/recipes/{target}/hero-from-recipe` moves the file to `hero/{target_scan_stem}{ext}`, sets hero columns, deletes the orphan draft.
+4. Cards prefer the hero thumbnail when present.
 
 ### 3. Browse and filter
 
@@ -132,8 +136,8 @@ Supported images: JPEG, PNG, HEIC, WebP, TIFF.
 | Health | `GET /api/health` |
 | Config | `GET/PATCH /api/config` |
 | Scan | `POST /api/scan`, `GET /api/scan/status` |
-| Recipes | `GET /api/recipes`, `GET/PATCH /api/recipes/{id}`, `PUT .../ingredients`, `PUT .../steps` |
-| Media | `GET /api/recipes/{id}/thumbnail`, `GET /api/recipes/{id}/image` |
+| Recipes | `GET /api/recipes`, `GET/PATCH /api/recipes/{id}`, `PUT .../ingredients`, `PUT .../steps`, `POST .../hero-from-recipe` |
+| Media | `GET /api/recipes/{id}/thumbnail`, `GET /api/recipes/{id}/image`, `GET /api/recipes/{id}/hero`, `GET /api/recipes/{id}/hero-thumbnail` |
 | Tags | CRUD, merge, assign/unassign-ids, cooccurring |
 | Backup | `POST /api/database/backup`, `GET /api/database/backups` |
 
@@ -142,9 +146,9 @@ Supported images: JPEG, PNG, HEIC, WebP, TIFF.
 | Route | Page |
 |-------|------|
 | `/` | Home — recent recipes + scan |
-| `/inbox` | Draft recipes + scan status |
+| `/inbox` | Draft review queue; Scan; Link as hero to… |
 | `/recipes` | Browse/search + multi-tag filter |
-| `/recipes/:id` | Detail editor (image + transcription) |
+| `/recipes/:id` | Detail editor (hero + scan + transcription) |
 | `/tags` | Tag catalog |
 | `/settings` | Paths + DB backup |
 

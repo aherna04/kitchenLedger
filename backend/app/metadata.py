@@ -51,12 +51,15 @@ def extract_image_info(path: Path) -> dict:
     }
 
 
-def thumb_cache_path(recipe_id: int, mtime: float) -> Path:
-    return THUMBS_DIR / f"{recipe_id}_{int(mtime)}_{THUMB_CACHE_VERSION}.jpg"
+def thumb_cache_path(recipe_id: int, mtime: float, variant: str = "") -> Path:
+    suffix = f"_{variant}" if variant else ""
+    return THUMBS_DIR / f"{recipe_id}_{int(mtime)}_{THUMB_CACHE_VERSION}{suffix}.jpg"
 
 
-def generate_thumbnail(path: Path, recipe_id: int, mtime: float) -> Path:
-    out = thumb_cache_path(recipe_id, mtime)
+def generate_thumbnail(
+    path: Path, recipe_id: int, mtime: float, variant: str = ""
+) -> Path:
+    out = thumb_cache_path(recipe_id, mtime, variant=variant)
     if out.exists():
         return out
     THUMBS_DIR.mkdir(parents=True, exist_ok=True)

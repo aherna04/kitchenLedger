@@ -7,6 +7,7 @@ from typing import Any, Iterator
 
 from app.config import (
     DB_PATH,
+    HERO_PATH,
     INBOX_PATH,
     KL_DATA_DIR,
     RECIPES_PATH,
@@ -33,6 +34,9 @@ CREATE TABLE IF NOT EXISTS recipes (
     height INTEGER,
     sha256 TEXT,
     mtime REAL NOT NULL,
+    hero_filename TEXT,
+    hero_path TEXT,
+    hero_mtime REAL,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -80,6 +84,7 @@ def default_config() -> dict[str, str]:
     return {
         "inbox_path": str(INBOX_PATH),
         "recipes_path": str(RECIPES_PATH),
+        "hero_path": str(HERO_PATH),
     }
 
 
@@ -98,7 +103,7 @@ def init_db() -> None:
         cfg = get_config(conn)
         defaults = default_config()
         fixes: dict[str, str] = {}
-        for key in ("inbox_path", "recipes_path"):
+        for key in ("inbox_path", "recipes_path", "hero_path"):
             current = Path(cfg.get(key, ""))
             fallback = Path(defaults[key])
             if (not current.exists()) and fallback.exists():
@@ -110,8 +115,13 @@ def init_db() -> None:
 
 
 def _migrate_schema(conn: sqlite3.Connection) -> None:
-    """Placeholder for future ALTER TABLE migrations."""
-    _ = conn
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(recipes)").fetchall()}
+    if "hero_filename" not in cols:
+        conn.execute("ALTER TABLE recipes ADD COLUMN hero_filename TEXT")
+    if "hero_path" not in cols:
+        conn.execute("ALTER TABLE recipes ADD COLUMN hero_path TEXT")
+    if "hero_mtime" not in cols:
+        conn.execute("ALTER TABLE recipes ADD COLUMN hero_mtime REAL")
 
 
 def cleanup_orphan_junction_rows(conn: sqlite3.Connection) -> None:

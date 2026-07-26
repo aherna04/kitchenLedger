@@ -28,6 +28,13 @@ export default function RecipeDetail() {
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
   const [newTagName, setNewTagName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [showDraftPicker, setShowDraftPicker] = useState(false);
+
+  const { data: draftsData } = useQuery({
+    queryKey: ["recipes", "draft"],
+    queryFn: () => api.listRecipes({ status: "draft", page_size: 100 }),
+    enabled: showDraftPicker,
+  });
 
   useEffect(() => {
     if (!recipe) return;
@@ -59,8 +66,8 @@ export default function RecipeDetail() {
         status: markReviewed ? "reviewed" : recipe?.status,
       });
     },
-    onSuccess: () => {
-      setMessage("Saved");
+    onSuccess: (_data, markReviewed) => {
+      setMessage(markReviewed ? "Reviewed — scan moved out of inbox" : "Saved");
       qc.invalidateQueries({ queryKey: ["recipe", recipeId] });
       qc.invalidateQueries({ queryKey: ["recipes"] });
       qc.invalidateQueries({ queryKey: ["tags"] });
@@ -77,7 +84,22 @@ export default function RecipeDetail() {
     },
   });
 
+  const attachHero = useMutation({
+    mutationFn: (sourceId: number) => api.attachHeroFromRecipe(recipeId, sourceId),
+    onSuccess: () => {
+      setMessage("Hero attached");
+      setShowDraftPicker(false);
+      qc.invalidateQueries({ queryKey: ["recipe", recipeId] });
+      qc.invalidateQueries({ queryKey: ["recipes"] });
+    },
+    onError: (err: Error) => setMessage(err.message),
+  });
+
   const selectedSet = useMemo(() => new Set(selectedTagIds), [selectedTagIds]);
+  const draftChoices = useMemo(
+    () => (draftsData?.items ?? []).filter((d) => d.id !== recipeId),
+    [draftsData, recipeId]
+  );
 
   function toggleTag(tagId: number) {
     setSelectedTagIds((ids) =>
@@ -104,6 +126,13 @@ export default function RecipeDetail() {
         <div className="header-actions">
           <button
             className="btn btn-secondary"
+            onClick={() => setShowDraftPicker(true)}
+            type="button"
+          >
+            Set hero from draft…
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={() => save.mutate(false)}
             disabled={save.isPending}
           >
@@ -125,8 +154,19 @@ export default function RecipeDetail() {
 
       <div className="recipe-detail">
         <div className="recipe-detail-image">
-          <img src={api.imageUrl(recipe.id)} alt={recipe.title || recipe.filename} />
-          <p className="muted filename">{recipe.filename}</p>
+          {recipe.hero_filename && (
+            <div className="recipe-hero">
+              <img
+                src={api.heroUrl(recipe.id, recipe.hero_mtime)}
+                alt={`${recipe.title || recipe.filename} dish`}
+              />
+              <p className="muted filename">Hero · {recipe.hero_filename}</p>
+            </div>
+          )}
+          <div className="recipe-scan">
+            <img src={api.imageUrl(recipe.id, recipe.mtime)} alt={recipe.title || recipe.filename} />
+            <p className="muted filename">Scan · {recipe.filename}</p>
+          </div>
           {recipe.ocr_text && (
             <details className="ocr-raw">
               <summary>Raw OCR text</summary>
@@ -206,6 +246,47 @@ export default function RecipeDetail() {
           </div>
         </div>
       </div>
+
+      {showDraftPicker && (
+        <div className="modal-backdrop" onClick={() => setShowDraftPicker(false)}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+            <h3>Set hero from draft…</h3>
+            <p className="muted">
+              Pick an Inbox draft (usually a dish photo). It moves to the hero folder and
+              that draft is removed.
+            </p>
+            <div className="modal-list">
+              {draftChoices.length === 0 ? (
+                <p className="muted">No other drafts in Inbox.</p>
+              ) : (
+                draftChoices.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className="modal-list-item"
+                    disabled={attachHero.isPending}
+                    onClick={() => attachHero.mutate(d.id)}
+                  >
+                    <img src={api.cardThumbUrl(d)} alt="" />
+                    <span>
+                      <strong>{d.title || d.filename}</strong>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="header-actions" style={{ marginTop: "0.75rem" }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowDraftPicker(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

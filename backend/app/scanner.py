@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import threading
 from pathlib import Path
 
@@ -176,14 +177,95 @@ def _prune_missing(conn, root: Path) -> int:
     return removed
 
 
+def _clear_stale_heroes(conn) -> int:
+    """Clear hero refs when the hero file is gone from disk."""
+    rows = conn.execute(
+        """
+        SELECT id, hero_path FROM recipes
+        WHERE hero_path IS NOT NULL AND hero_path != ''
+        """
+    ).fetchall()
+    cleared = 0
+    for row in rows:
+        if not Path(row["hero_path"]).exists():
+            conn.execute(
+                """
+                UPDATE recipes SET
+                    hero_filename = NULL, hero_path = NULL, hero_mtime = NULL,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (row["id"],),
+            )
+            cleared += 1
+    if cleared:
+        conn.commit()
+    return cleared
+
+
+def _match_heroes(conn, hero_root: Path) -> int:
+    """Match hero/ images to recipes by filename stem; return count matched."""
+    hero_files = iter_image_files(hero_root)
+    if not hero_files:
+        return 0
+
+    by_stem: dict[str, list[sqlite3.Row]] = {}
+    rows = conn.execute(
+        "SELECT id, filename, hero_path, hero_mtime FROM recipes"
+    ).fetchall()
+    for row in rows:
+        stem = Path(row["filename"]).stem.lower()
+        by_stem.setdefault(stem, []).append(row)
+
+    matched = 0
+    for path in hero_files:
+        stem = path.stem.lower()
+        candidates = by_stem.get(stem) or []
+        if not candidates:
+            continue
+        # Prefer an unmatched recipe; otherwise update the first match
+        recipe = candidates[0]
+        for cand in candidates:
+            if not cand["hero_path"]:
+                recipe = cand
+                break
+
+        mtime = path.stat().st_mtime
+        existing_path = recipe["hero_path"]
+        existing_mtime = recipe["hero_mtime"]
+        if existing_path == str(path) and existing_mtime == mtime:
+            generate_thumbnail(path, recipe["id"], mtime, variant="hero")
+            matched += 1
+            continue
+
+        conn.execute(
+            """
+            UPDATE recipes SET
+                hero_filename = ?, hero_path = ?, hero_mtime = ?,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (path.name, str(path), mtime, recipe["id"]),
+        )
+        generate_thumbnail(path, recipe["id"], mtime, variant="hero")
+        matched += 1
+
+    if matched:
+        conn.commit()
+    return matched
+
+
 def _run_scan() -> None:
     try:
         with get_conn() as conn:
             cfg = get_config(conn)
             root = Path(cfg["inbox_path"])
+            hero_root = Path(cfg.get("hero_path") or "")
         files = iter_image_files(root)
         scan_state.start(len(files))
         ocr_ids: list[tuple[int, Path]] = []
+        removed = 0
+        hero_matched = 0
 
         with get_conn() as conn:
             for path in files:
@@ -211,10 +293,21 @@ def _run_scan() -> None:
                             "ocr", f"OCR error on {path.name}: {exc}"
                         )
 
-        scan_state.finish(
-            f"Scan complete: {len(files)} files, {len(ocr_ids)} OCR'd"
-            + (f", {removed} pruned" if removed else "")
-        )
+        scan_state.set_phase("hero", "Matching hero images...")
+        with get_conn() as conn:
+            _clear_stale_heroes(conn)
+            if hero_root:
+                try:
+                    hero_matched = _match_heroes(conn, hero_root)
+                except Exception as exc:
+                    scan_state.set_phase("hero", f"Hero match error: {exc}")
+
+        parts = [f"Scan complete: {len(files)} files, {len(ocr_ids)} OCR'd"]
+        if removed:
+            parts.append(f"{removed} pruned")
+        if hero_matched:
+            parts.append(f"{hero_matched} heroes")
+        scan_state.finish(", ".join(parts))
     except Exception as exc:
         scan_state.finish(f"Scan failed: {exc}")
 

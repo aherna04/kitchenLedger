@@ -426,6 +426,23 @@ button.tag-chip {
   background: #0a0c10;
 }
 
+.recipe-hero {
+  margin-bottom: 1.25rem;
+}
+
+.recipe-hero img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #0a0c10;
+}
+
+.recipe-scan {
+  margin-top: 0.25rem;
+}
+
 .filename {
   margin: 0.5rem 0;
   word-break: break-all;
@@ -515,6 +532,81 @@ button.tag-chip {
   padding-left: 1.1rem;
   color: var(--muted);
   font-size: 0.875rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.modal-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  width: min(440px, 100%);
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-panel h3 {
+  margin: 0 0 0.5rem;
+}
+
+.modal-search {
+  width: 100%;
+  background: #0f1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.modal-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.modal-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  background: #0f1117;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.modal-list-item:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.modal-list-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.modal-list-item img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #0a0c10;
+  flex-shrink: 0;
 }
 
 @media (max-width: 900px) {

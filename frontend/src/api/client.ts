@@ -31,6 +31,8 @@ export interface Recipe {
   height: number | null;
   sha256: string | null;
   mtime: number;
+  hero_filename: string | null;
+  hero_mtime: number | null;
   created_at: string | null;
   updated_at: string | null;
   ingredients: Ingredient[];
@@ -48,6 +50,7 @@ export interface RecipeList {
 export interface Config {
   inbox_path: string;
   recipes_path: string;
+  hero_path: string;
   kl_root?: string | null;
   kl_data_dir?: string | null;
 }
@@ -101,6 +104,10 @@ function qs(params: Record<string, string | number | boolean | undefined | null 
   }
   const s = q.toString();
   return s ? `?${s}` : "";
+}
+
+function cacheBust(v?: number | null): string {
+  return v ? `?v=${Math.floor(v)}` : "";
 }
 
 export const api = {
@@ -160,8 +167,28 @@ export const api = {
       body: JSON.stringify({ lines }),
     }),
 
-  thumbUrl: (id: number) => `/api/recipes/${id}/thumbnail`,
-  imageUrl: (id: number) => `/api/recipes/${id}/image`,
+  attachHeroFromRecipe: (targetId: number, sourceRecipeId: number) =>
+    request<Recipe>(`/api/recipes/${targetId}/hero-from-recipe`, {
+      method: "POST",
+      body: JSON.stringify({ source_recipe_id: sourceRecipeId }),
+    }),
+
+  // `v` is an mtime-based cache-buster so replaced files display immediately
+  // instead of serving a stale browser-cached image at a stable URL.
+  thumbUrl: (id: number, v?: number | null) => `/api/recipes/${id}/thumbnail${cacheBust(v)}`,
+  imageUrl: (id: number, v?: number | null) => `/api/recipes/${id}/image${cacheBust(v)}`,
+  heroUrl: (id: number, v?: number | null) => `/api/recipes/${id}/hero${cacheBust(v)}`,
+  heroThumbUrl: (id: number, v?: number | null) => `/api/recipes/${id}/hero-thumbnail${cacheBust(v)}`,
+  /** Card thumbnail: prefer hero dish photo when present. */
+  cardThumbUrl: (recipe: {
+    id: number;
+    hero_filename?: string | null;
+    hero_mtime?: number | null;
+    mtime?: number | null;
+  }) =>
+    recipe.hero_filename
+      ? `/api/recipes/${recipe.id}/hero-thumbnail${cacheBust(recipe.hero_mtime)}`
+      : `/api/recipes/${recipe.id}/thumbnail${cacheBust(recipe.mtime)}`,
 
   listTags: () => request<Tag[]>("/api/tags"),
   createTag: (name: string) =>

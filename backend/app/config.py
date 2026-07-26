@@ -10,6 +10,7 @@ KL_DATA_DIR = Path(
 
 INBOX_PATH = KL_ROOT / "inbox"
 RECIPES_PATH = KL_ROOT / "recipes"
+HERO_PATH = KL_ROOT / "hero"
 
 DB_PATH = KL_DATA_DIR / "index.db"
 BACKUPS_DIR = KL_DATA_DIR / "backups"
@@ -38,7 +39,7 @@ def mime_type_for_path(path: Path | str) -> str:
 
 
 def ensure_media_dirs() -> None:
-    for path in (INBOX_PATH, RECIPES_PATH):
+    for path in (INBOX_PATH, RECIPES_PATH, HERO_PATH):
         path.mkdir(parents=True, exist_ok=True)
 
 

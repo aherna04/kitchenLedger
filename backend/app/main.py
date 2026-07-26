@@ -22,6 +22,7 @@ from app.models import (
     ConfigUpdate,
     DatabaseBackupListOut,
     DatabaseBackupOut,
+    HeroFromRecipeIn,
     IngredientOut,
     LinesReplace,
     RecipeListOut,
@@ -36,6 +37,7 @@ from app.models import (
     TagUpdate,
 )
 from app.recipes import (
+    attach_hero_from_recipe,
     get_recipe,
     list_recipes,
     replace_ingredients,
@@ -88,6 +90,7 @@ def read_config() -> ConfigOut:
     return ConfigOut(
         inbox_path=cfg["inbox_path"],
         recipes_path=cfg["recipes_path"],
+        hero_path=cfg["hero_path"],
         kl_root=str(KL_ROOT),
         kl_data_dir=str(KL_DATA_DIR),
     )
@@ -101,6 +104,7 @@ def patch_config(body: ConfigUpdate) -> ConfigOut:
     return ConfigOut(
         inbox_path=cfg["inbox_path"],
         recipes_path=cfg["recipes_path"],
+        hero_path=cfg["hero_path"],
         kl_root=str(KL_ROOT),
         kl_data_dir=str(KL_DATA_DIR),
     )
@@ -170,6 +174,24 @@ def patch_recipe(recipe_id: int, body: RecipeUpdate) -> RecipeOut:
     return _recipe_out(recipe)
 
 
+@app.post("/api/recipes/{recipe_id}/hero-from-recipe", response_model=RecipeOut)
+def post_hero_from_recipe(recipe_id: int, body: HeroFromRecipeIn) -> RecipeOut:
+    try:
+        with get_conn() as conn:
+            recipe = attach_hero_from_recipe(
+                conn, recipe_id, body.source_recipe_id
+            )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return _recipe_out(recipe)
+
+
 @app.put("/api/recipes/{recipe_id}/ingredients", response_model=list[IngredientOut])
 def put_ingredients(recipe_id: int, body: LinesReplace) -> list[IngredientOut]:
     with get_conn() as conn:
@@ -217,6 +239,43 @@ def get_image(recipe_id: int):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Image missing on disk")
     return FileResponse(path, media_type=mime_type_for_path(path))
+
+
+@app.get("/api/recipes/{recipe_id}/hero")
+def get_hero(recipe_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT hero_path FROM recipes WHERE id = ?", (recipe_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    if not row["hero_path"]:
+        raise HTTPException(status_code=404, detail="Hero image not set")
+    path = Path(row["hero_path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Hero image missing on disk")
+    return FileResponse(path, media_type=mime_type_for_path(path))
+
+
+@app.get("/api/recipes/{recipe_id}/hero-thumbnail")
+def get_hero_thumbnail(recipe_id: int):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT hero_path, hero_mtime FROM recipes WHERE id = ?", (recipe_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    if not row["hero_path"] or row["hero_mtime"] is None:
+        raise HTTPException(status_code=404, detail="Hero image not set")
+    path = Path(row["hero_path"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Hero image missing on disk")
+    thumb = thumb_cache_path(recipe_id, row["hero_mtime"], variant="hero")
+    if not thumb.exists():
+        thumb = generate_thumbnail(
+            path, recipe_id, row["hero_mtime"], variant="hero"
+        )
+    return FileResponse(thumb, media_type="image/jpeg")
 
 
 @app.get("/api/tags", response_model=list[TagOut])

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
+from pathlib import Path
 
+from app.db import get_config
+from app.metadata import generate_thumbnail
 from app.tags import get_recipe_tags, set_recipe_tags
 
 
@@ -93,6 +97,110 @@ def replace_steps(
     return get_steps(conn, recipe_id)
 
 
+def _unique_dest(dest: Path) -> Path:
+    if not dest.exists():
+        return dest
+    stem = dest.stem
+    suffix = dest.suffix
+    parent = dest.parent
+    n = 1
+    while True:
+        candidate = parent / f"{stem}-{n}{suffix}"
+        if not candidate.exists():
+            return candidate
+        n += 1
+
+
+def _path_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def move_scan_to_recipes(conn: sqlite3.Connection, recipe_id: int) -> None:
+    """If the scan file still lives under inbox/, move it to recipes/."""
+    row = conn.execute(
+        "SELECT image_path, filename FROM recipes WHERE id = ?", (recipe_id,)
+    ).fetchone()
+    if not row:
+        return
+    cfg = get_config(conn)
+    inbox = Path(cfg["inbox_path"])
+    recipes_dir = Path(cfg["recipes_path"])
+    src = Path(row["image_path"])
+    if not src.exists() or not _path_under(src, inbox):
+        return
+
+    recipes_dir.mkdir(parents=True, exist_ok=True)
+    dest = _unique_dest(recipes_dir / src.name)
+    shutil.move(str(src), str(dest))
+    mtime = dest.stat().st_mtime
+    conn.execute(
+        """
+        UPDATE recipes SET
+            image_path = ?, filename = ?, mtime = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (str(dest), dest.name, mtime, recipe_id),
+    )
+    conn.commit()
+    generate_thumbnail(dest, recipe_id, mtime)
+
+
+def attach_hero_from_recipe(
+    conn: sqlite3.Connection, target_id: int, source_recipe_id: int
+) -> dict:
+    if target_id == source_recipe_id:
+        raise ValueError("Cannot attach a recipe as its own hero")
+
+    target = conn.execute(
+        "SELECT * FROM recipes WHERE id = ?", (target_id,)
+    ).fetchone()
+    source = conn.execute(
+        "SELECT * FROM recipes WHERE id = ?", (source_recipe_id,)
+    ).fetchone()
+    if not target:
+        raise LookupError("Target recipe not found")
+    if not source:
+        raise LookupError("Source recipe not found")
+
+    src_path = Path(source["image_path"])
+    if not src_path.exists():
+        raise FileNotFoundError("Source image missing on disk")
+
+    cfg = get_config(conn)
+    hero_dir = Path(cfg["hero_path"])
+    hero_dir.mkdir(parents=True, exist_ok=True)
+
+    stem = Path(target["filename"]).stem
+    dest = hero_dir / f"{stem}{src_path.suffix.lower()}"
+    if dest.exists() and dest.resolve() != src_path.resolve():
+        dest.unlink()
+    shutil.move(str(src_path), str(dest))
+    mtime = dest.stat().st_mtime
+
+    conn.execute(
+        """
+        UPDATE recipes SET
+            hero_filename = ?, hero_path = ?, hero_mtime = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (dest.name, str(dest), mtime, target_id),
+    )
+    # Drop orphan draft (and its ingredients/steps/tags via CASCADE)
+    conn.execute("DELETE FROM recipes WHERE id = ?", (source_recipe_id,))
+    conn.commit()
+    generate_thumbnail(dest, target_id, mtime, variant="hero")
+    recipe = get_recipe(conn, target_id)
+    if not recipe:
+        raise LookupError("Target recipe not found after attach")
+    return recipe
+
+
 def update_recipe(
     conn: sqlite3.Connection,
     recipe_id: int,
@@ -105,11 +213,12 @@ def update_recipe(
     tag_ids: list[int] | None = None,
 ) -> dict | None:
     existing = conn.execute(
-        "SELECT id FROM recipes WHERE id = ?", (recipe_id,)
+        "SELECT id, status FROM recipes WHERE id = ?", (recipe_id,)
     ).fetchone()
     if not existing:
         return None
 
+    prev_status = existing["status"]
     fields: list[str] = []
     params: list[object] = []
     if title is not None:
@@ -139,6 +248,12 @@ def update_recipe(
 
     if tag_ids is not None:
         set_recipe_tags(conn, recipe_id, tag_ids)
+
+    # Reviewed scans belong in recipes/. Fire on the transition and also
+    # self-heal any already-reviewed recipe whose scan is still in inbox.
+    effective_status = status if status is not None else prev_status
+    if effective_status == "reviewed":
+        move_scan_to_recipes(conn, recipe_id)
 
     return get_recipe(conn, recipe_id)
 

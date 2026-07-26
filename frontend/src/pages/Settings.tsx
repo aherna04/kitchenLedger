@@ -28,6 +28,7 @@ export default function Settings() {
       api.updateConfig({
         inbox_path: form.inbox_path ?? config?.inbox_path,
         recipes_path: form.recipes_path ?? config?.recipes_path,
+        hero_path: form.hero_path ?? config?.hero_path,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config"] });
@@ -45,7 +46,7 @@ export default function Settings() {
 
   if (!config) return <div>Loading…</div>;
 
-  const val = (key: "inbox_path" | "recipes_path") =>
+  const val = (key: "inbox_path" | "recipes_path" | "hero_path") =>
     form[key] ?? config[key] ?? "";
 
   const backups = (backupsData?.items ?? []).slice(0, 10);
@@ -59,14 +60,21 @@ export default function Settings() {
       <section className="settings-section">
         <h3 className="settings-section-title">Paths</h3>
         <p className="settings-section-desc">
-          Inbox is where you drop scanned images. Catalog lives under{" "}
-          <code>{config.kl_data_dir}</code>.
+          Inbox holds scanned cards; hero holds dish photos matched by filename stem.
+          Catalog lives under <code>{config.kl_data_dir}</code>.
         </p>
         <div className="form-group">
           <label>Inbox path</label>
           <input
             value={val("inbox_path")}
             onChange={(e) => setForm((f) => ({ ...f, inbox_path: e.target.value }))}
+          />
+        </div>
+        <div className="form-group">
+          <label>Hero path</label>
+          <input
+            value={val("hero_path")}
+            onChange={(e) => setForm((f) => ({ ...f, hero_path: e.target.value }))}
           />
         </div>
         <div className="form-group">

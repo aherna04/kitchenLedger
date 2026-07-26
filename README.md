@@ -7,7 +7,7 @@ Local-first web app for cataloging scanned handwritten recipes. Drop scans into 
 ```bash
 cp .env.example .env
 # Edit KL_HOST_PATH only — Compose hardcodes container paths to /media
-mkdir -p "$(grep KL_HOST_PATH .env | cut -d= -f2)/inbox"
+mkdir -p "$(grep KL_HOST_PATH .env | cut -d= -f2)/"{inbox,hero}
 docker compose up --build
 ```
 
@@ -18,10 +18,14 @@ Ports `5174` / `8001` avoid clashing with Image Organizer on `5173` / `8000`. In
 
 ## Workflow
 
-1. Drop scanned recipe images into `{KL_HOST_PATH}/inbox/`.
-2. Open **Inbox** and click **Scan**. Each new image is indexed, thumbnailed, and OCR'd into a draft recipe.
-3. Open a recipe, correct the transcription beside the scan, add tags, and mark **reviewed**.
-4. Browse and search recipes; filter by multiple tags (AND).
+1. Drop **recipe scans** and **dish photos** into `{KL_HOST_PATH}/inbox/`.
+2. Open **Inbox** and click **Scan**. Files are indexed and OCR'd into drafts; they **stay in inbox** until you process them.
+3. For a recipe scan: open the draft, correct the transcription, add tags, and **Mark reviewed** — the scan file moves to `recipes/`.
+4. For a dish photo: on the draft card choose **Link as hero to…** and pick the recipe — the file moves to `hero/` and the orphan draft is removed. (Or use **Set hero from draft…** on the recipe detail page.)
+5. Browse and search recipes; filter by multiple tags (AND). Cards prefer the hero thumbnail when available.
+
+Optional: files already named to match a scan stem in `hero/` still auto-attach on Scan.
+
 
 ## Local development (without Docker)
 

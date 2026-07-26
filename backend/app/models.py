@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ConfigOut(BaseModel):
     inbox_path: str
     recipes_path: str
+    hero_path: str
     kl_root: str | None = None
     kl_data_dir: str | None = None
 
@@ -15,6 +16,7 @@ class ConfigOut(BaseModel):
 class ConfigUpdate(BaseModel):
     inbox_path: str | None = None
     recipes_path: str | None = None
+    hero_path: str | None = None
 
 
 class TagOut(BaseModel):
@@ -68,6 +70,8 @@ class RecipeOut(BaseModel):
     height: int | None = None
     sha256: str | None = None
     mtime: float
+    hero_filename: str | None = None
+    hero_mtime: float | None = None
     created_at: str | None = None
     updated_at: str | None = None
     ingredients: list[IngredientOut] = []
@@ -93,6 +97,10 @@ class RecipeUpdate(BaseModel):
 
 class LinesReplace(BaseModel):
     lines: list[str]
+
+
+class HeroFromRecipeIn(BaseModel):
+    source_recipe_id: int
 
 
 class ScanStatusOut(BaseModel):

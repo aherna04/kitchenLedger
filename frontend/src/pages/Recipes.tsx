@@ -124,7 +124,7 @@ export default function Recipes() {
           <div className="recipe-grid">
             {items.map((r) => (
               <Link key={r.id} to={`/recipes/${r.id}`} className="recipe-card">
-                <img src={api.thumbUrl(r.id)} alt={r.title || r.filename} loading="lazy" />
+                <img src={api.cardThumbUrl(r)} alt={r.title || r.filename} loading="lazy" />
                 <div className="recipe-card-body">
                   <h3>{r.title || r.filename}</h3>
                   <div className="recipe-card-meta">
